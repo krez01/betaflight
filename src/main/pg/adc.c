@@ -28,6 +28,7 @@
 #include "pg/pg.h"
 #include "pg/pg_ids.h"
 
+#include "drivers/adc.h"
 #include "drivers/adc_impl.h"
 #include "drivers/io.h"
 
@@ -39,6 +40,20 @@ PG_REGISTER_WITH_RESET_FN(adcConfig_t, adcConfig, PG_ADC_CONFIG, 0);
 void pgResetFn_adcConfig(adcConfig_t *adcConfig)
 {
     adcConfig->device = ADC_DEV_TO_CFG(adcDeviceByInstance(ADC_INSTANCE));
+    adcConfig->dmaopt[ADCDEV_1] = ADC1_DMA_OPT;
+// These conditionals need to match the ones used in 'src/main/drivers/adc.h'.
+#if defined(ADC2)
+    adcConfig->dmaopt[ADCDEV_2] = ADC2_DMA_OPT;
+#endif
+#if defined(ADC3)
+    adcConfig->dmaopt[ADCDEV_3] = ADC3_DMA_OPT;
+#endif
+#if defined(ADC4)
+    adcConfig->dmaopt[ADCDEV_4] = ADC4_DMA_OPT;
+#endif
+#if defined(ADC5)
+    adcConfig->dmaopt[ADCDEV_5] = ADC5_DMA_OPT;
+#endif
 
 #ifdef VBAT_ADC_PIN
     adcConfig->vbat.enabled = true;
@@ -60,5 +75,8 @@ void pgResetFn_adcConfig(adcConfig_t *adcConfig)
     adcConfig->rssi.ioTag = IO_TAG(RSSI_ADC_PIN);
 #endif
 
+    adcConfig->vrefIntCalibration = 0;
+    adcConfig->tempSensorCalibration1 = 0;
+    adcConfig->tempSensorCalibration2 = 0;
 }
 #endif // USE_ADC

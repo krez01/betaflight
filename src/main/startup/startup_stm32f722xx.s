@@ -83,6 +83,8 @@ defined in linker script */
 Reset_Handler:  
   ldr   sp, =_estack      /* set stack pointer */
 
+  bl persistentObjectInit
+
 /* Copy the data segment initializers from flash to SRAM */  
   movs  r1, #0
   b  LoopCopyDataInit
@@ -135,6 +137,19 @@ LoopFillZerofastram_bss:
   ldr  r3, = _efastram_bss
   cmp  r2, r3
   bcc  FillZerofastram_bss
+
+/* Mark the heap and stack */
+  ldr r2, =_heap_stack_begin
+  b   LoopMarkHeapStack
+
+MarkHeapStack:
+  movs    r3, 0xa5a5a5a5
+  str r3, [r2], #4
+
+LoopMarkHeapStack:
+  ldr r3, = _heap_stack_end
+  cmp r2, r3
+  bcc MarkHeapStack
 
 /* Call the clock system intitialization function.*/
   bl  SystemInit   

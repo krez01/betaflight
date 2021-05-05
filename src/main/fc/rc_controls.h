@@ -37,7 +37,11 @@ typedef enum rc_alias {
     AUX5,
     AUX6,
     AUX7,
-    AUX8
+    AUX8,
+    AUX9,
+    AUX10,
+    AUX11,
+    AUX12
 } rc_alias_e;
 
 #define PRIMARY_CHANNEL_COUNT (THROTTLE + 1)
@@ -66,23 +70,6 @@ typedef enum {
     RC_SMOOTHING_TYPE_FILTER
 } rcSmoothingType_e;
 
-typedef enum {
-    RC_SMOOTHING_INPUT_PT1,
-    RC_SMOOTHING_INPUT_BIQUAD
-} rcSmoothingInputFilter_e;
-
-typedef enum {
-    RC_SMOOTHING_DERIVATIVE_OFF,
-    RC_SMOOTHING_DERIVATIVE_PT1,
-    RC_SMOOTHING_DERIVATIVE_BIQUAD
-} rcSmoothingDerivativeFilter_e;
-
-typedef enum {
-    RC_SMOOTHING_VALUE_INPUT_ACTIVE,
-    RC_SMOOTHING_VALUE_DERIVATIVE_ACTIVE,
-    RC_SMOOTHING_VALUE_AVERAGE_FRAME
-} rcSmoothingInfoType_e;
-
 #define ROL_LO (1 << (2 * ROLL))
 #define ROL_CE (3 << (2 * ROLL))
 #define ROL_HI (2 << (2 * ROLL))
@@ -100,6 +87,9 @@ typedef enum {
 
 #define CONTROL_RATE_CONFIG_RC_RATES_MAX  255
 
+#define CONTROL_RATE_CONFIG_RATE_LIMIT_MIN	200
+#define CONTROL_RATE_CONFIG_RATE_LIMIT_MAX	1998
+
 // (Super) rates are constrained to [0, 100] for Betaflight rates, so values higher than 100 won't make a difference. Range extended for RaceFlight rates.
 #define CONTROL_RATE_CONFIG_RATE_MAX  255
 
@@ -114,18 +104,17 @@ typedef struct rcSmoothingFilterTraining_s {
     uint16_t max;
 } rcSmoothingFilterTraining_t;
 
-typedef union rcSmoothingFilterTypes_u {
-    pt1Filter_t pt1Filter;
-    biquadFilter_t biquadFilter;
-} rcSmoothingFilterTypes_t;
-
 typedef struct rcSmoothingFilter_s {
     bool filterInitialized;
-    rcSmoothingFilterTypes_t filter[4];
+    pt3Filter_t filter[4];
+    uint8_t inputCutoffSetting;
     uint16_t inputCutoffFrequency;
+    uint8_t derivativeCutoffSetting;
     uint16_t derivativeCutoffFrequency;
     int averageFrameTimeUs;
     rcSmoothingFilterTraining_t training;
+    uint8_t debugAxis;
+    uint8_t autoSmoothnessFactor;
 } rcSmoothingFilter_t;
 
 typedef struct rcControlsConfig_s {
@@ -166,6 +155,4 @@ void processRcStickPositions();
 bool isUsingSticksForArming(void);
 
 int32_t getRcStickDeflection(int32_t axis, uint16_t midrc);
-struct pidProfile_s;
-struct modeActivationCondition_s;
-void useRcControlsConfig(struct pidProfile_s *pidProfileToUse);
+void rcControlsInit(void);

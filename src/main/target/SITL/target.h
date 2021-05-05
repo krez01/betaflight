@@ -33,7 +33,7 @@
 
 // use simulatior's attitude directly
 // disable this if wants to test AHRS algorithm
-#define SKIP_IMU_CALC
+#undef USE_IMU_CALC
 
 //#define SIMULATOR_ACC_SYNC
 //#define SIMULATOR_GYRO_SYNC
@@ -42,7 +42,7 @@
 
 // file name to save config
 #define EEPROM_FILENAME "eeprom.bin"
-#define EEPROM_IN_RAM
+#define CONFIG_IN_FILE
 #define EEPROM_SIZE     32768
 
 #define U_ID_0 0
@@ -90,7 +90,7 @@
 
 #define USE_PARAMETER_GROUPS
 
-#undef STACK_CHECK // I think SITL don't need this
+#undef USE_STACK_CHECK // I think SITL don't need this
 #undef USE_DASHBOARD
 #undef USE_TELEMETRY_LTM
 #undef USE_ADC
@@ -100,6 +100,7 @@
 #undef USE_PWM
 #undef USE_SERIAL_RX
 #undef USE_SERIALRX_CRSF
+#undef USE_SERIALRX_GHST
 #undef USE_SERIALRX_IBUS
 #undef USE_SERIALRX_SBUS
 #undef USE_SERIALRX_SPEKTRUM
@@ -114,6 +115,7 @@
 #undef USE_RESOURCE_MGMT
 #undef USE_CMS
 #undef USE_TELEMETRY_CRSF
+#undef USE_TELEMETRY_GHST
 #undef USE_TELEMETRY_IBUS
 #undef USE_TELEMETRY_JETIEXBUS
 #undef USE_TELEMETRY_SRXL
@@ -125,11 +127,13 @@
 #undef USE_CAMERA_CONTROL
 #undef USE_BRUSHED_ESC_AUTODETECT
 #undef USE_GPS_RESCUE
+#undef USE_SERIAL_4WAY_BLHELI_BOOTLOADER
+#undef USE_SERIAL_4WAY_SK_BOOTLOADER
 
 #undef USE_I2C
 #undef USE_SPI
 
-#define FLASH_SIZE 2048
+#define TARGET_FLASH_SIZE 2048
 
 
 #define LED_STRIP_TIMER 1
@@ -138,22 +142,9 @@
 
 #define DEFIO_NO_PORTS   // suppress 'no pins defined' warning
 
-#define WS2811_DMA_TC_FLAG (void *)1
-#define WS2811_DMA_HANDLER_IDENTIFER 0
-
-
 // belows are internal stuff
 
-uint32_t SystemCoreClock;
-
-#ifdef EEPROM_IN_RAM
-extern uint8_t eepromData[EEPROM_SIZE];
-#define __config_start (*eepromData)
-#define __config_end (*ARRAYEND(eepromData))
-#else
-extern uint8_t __config_start;   // configured via linker script when building binaries.
-extern uint8_t __config_end;
-#endif
+extern uint32_t SystemCoreClock;
 
 typedef enum
 {
@@ -265,3 +256,5 @@ uint64_t micros64(void);
 uint64_t millis64(void);
 
 int lockMainPID(void);
+
+

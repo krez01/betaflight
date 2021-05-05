@@ -29,7 +29,7 @@
 
 #include "platform.h"
 
-#if defined(USE_TELEMETRY) && defined(USE_TELEMETRY_MAVLINK)
+#if defined(USE_TELEMETRY_MAVLINK)
 
 #include "common/maths.h"
 #include "common/axis.h"
@@ -44,7 +44,7 @@
 #include "drivers/sensor.h"
 #include "drivers/time.h"
 
-#include "fc/config.h"
+#include "config/config.h"
 #include "fc/rc_controls.h"
 #include "fc/runtime_config.h"
 
@@ -58,7 +58,6 @@
 #include "io/gimbal.h"
 #include "io/gps.h"
 #include "io/ledstrip.h"
-#include "io/motors.h"
 
 #include "rx/rx.h"
 
@@ -86,7 +85,7 @@
 extern uint16_t rssi; // FIXME dependency on mw.c
 
 static serialPort_t *mavlinkPort = NULL;
-static serialPortConfig_t *portConfig;
+static const serialPortConfig_t *portConfig;
 
 static bool mavlinkTelemetryEnabled =  false;
 static portSharing_e mavlinkPortSharing;
@@ -136,6 +135,17 @@ static void mavlinkSerialWrite(uint8_t * buf, uint16_t length)
         serialWrite(mavlinkPort, buf[i]);
 }
 
+static int16_t headingOrScaledMilliAmpereHoursDrawn(void)
+{
+    if (isAmperageConfigured() && telemetryConfig()->mavlink_mah_as_heading_divisor > 0) {
+        // In the Connex Prosight OSD, this goes between 0 and 999, so it will need to be scaled in that range.
+        return getMAhDrawn() / telemetryConfig()->mavlink_mah_as_heading_divisor;
+    }
+    // heading Current heading in degrees, in compass units (0..360, 0=north)
+    return DECIDEGREES_TO_DEGREES(attitude.values.yaw);
+}
+
+
 void freeMAVLinkTelemetryPort(void)
 {
     closeSerialPort(mavlinkPort);
@@ -172,7 +182,7 @@ void configureMAVLinkTelemetryPort(void)
 
 void checkMAVLinkTelemetryState(void)
 {
-    if (portConfig && telemetryCheckRxPortShared(portConfig)) {
+    if (portConfig && telemetryCheckRxPortShared(portConfig, rxRuntimeState.serialrxProvider)) {
         if (!mavlinkTelemetryEnabled && telemetrySharedPort != NULL) {
             mavlinkPort = telemetrySharedPort;
             mavlinkTelemetryEnabled = true;
@@ -216,7 +226,7 @@ void mavlinkSendSystemStatus(void)
     int8_t batteryRemaining = 100;
 
     if (getBatteryState() < BATTERY_NOT_PRESENT) {
-        batteryVoltage = isBatteryVoltageConfigured() ? getBatteryVoltage() * 100 : batteryVoltage;
+        batteryVoltage = isBatteryVoltageConfigured() ? getBatteryVoltage() * 10 : batteryVoltage;
         batteryAmperage = isAmperageConfigured() ? getAmperage() : batteryAmperage;
         batteryRemaining = isBatteryVoltageConfigured() ? calculateBatteryPercentageRemaining() : batteryRemaining;
     }
@@ -265,21 +275,21 @@ void mavlinkSendRCChannelsAndRSSI(void)
         // port Servo output port (set of 8 outputs = 1 port). Most MAVs will just use one, but this allows to encode more than 8 servos.
         0,
         // chan1_raw RC channel 1 value, in microseconds
-        (rxRuntimeConfig.channelCount >= 1) ? rcData[0] : 0,
+        (rxRuntimeState.channelCount >= 1) ? rcData[0] : 0,
         // chan2_raw RC channel 2 value, in microseconds
-        (rxRuntimeConfig.channelCount >= 2) ? rcData[1] : 0,
+        (rxRuntimeState.channelCount >= 2) ? rcData[1] : 0,
         // chan3_raw RC channel 3 value, in microseconds
-        (rxRuntimeConfig.channelCount >= 3) ? rcData[2] : 0,
+        (rxRuntimeState.channelCount >= 3) ? rcData[2] : 0,
         // chan4_raw RC channel 4 value, in microseconds
-        (rxRuntimeConfig.channelCount >= 4) ? rcData[3] : 0,
+        (rxRuntimeState.channelCount >= 4) ? rcData[3] : 0,
         // chan5_raw RC channel 5 value, in microseconds
-        (rxRuntimeConfig.channelCount >= 5) ? rcData[4] : 0,
+        (rxRuntimeState.channelCount >= 5) ? rcData[4] : 0,
         // chan6_raw RC channel 6 value, in microseconds
-        (rxRuntimeConfig.channelCount >= 6) ? rcData[5] : 0,
+        (rxRuntimeState.channelCount >= 6) ? rcData[5] : 0,
         // chan7_raw RC channel 7 value, in microseconds
-        (rxRuntimeConfig.channelCount >= 7) ? rcData[6] : 0,
+        (rxRuntimeState.channelCount >= 7) ? rcData[6] : 0,
         // chan8_raw RC channel 8 value, in microseconds
-        (rxRuntimeConfig.channelCount >= 8) ? rcData[7] : 0,
+        (rxRuntimeState.channelCount >= 8) ? rcData[7] : 0,
         // rssi Receive signal strength indicator, 0: 0%, 255: 100%
         constrain(scaleRange(getRssi(), 0, RSSI_MAX_VALUE, 0, 255), 0, 255));
     msgLength = mavlink_msg_to_send_buffer(mavBuffer, &mavMsg);
@@ -317,7 +327,7 @@ void mavlinkSendPosition(void)
         // lon Longitude in 1E7 degrees
         gpsSol.llh.lon,
         // alt Altitude in 1E3 meters (millimeters) above MSL
-        gpsSol.llh.alt * 1000,
+        gpsSol.llh.altCm * 10,
         // eph GPS HDOP horizontal dilution of position in cm (m*100). If unknown, set to: 65535
         65535,
         // epv GPS VDOP horizontal dilution of position in cm (m*100). If unknown, set to: 65535
@@ -340,13 +350,9 @@ void mavlinkSendPosition(void)
         // lon Longitude in 1E7 degrees
         gpsSol.llh.lon,
         // alt Altitude in 1E3 meters (millimeters) above MSL
-        gpsSol.llh.alt * 1000,
+        gpsSol.llh.altCm * 10,
         // relative_alt Altitude above ground in meters, expressed as * 1000 (millimeters)
-#if defined(USE_BARO) || defined(USE_RANGEFINDER)
-        (sensors(SENSOR_RANGEFINDER) || sensors(SENSOR_BARO)) ? getEstimatedAltitude() * 10 : gpsSol.llh.alt * 1000,
-#else
-        gpsSol.llh.alt * 1000,
-#endif
+        getEstimatedAltitudeCm() * 10,
         // Ground X Speed (Latitude), expressed as m/s * 100
         0,
         // Ground Y Speed (Longitude), expressed as m/s * 100
@@ -354,16 +360,16 @@ void mavlinkSendPosition(void)
         // Ground Z Speed (Altitude), expressed as m/s * 100
         0,
         // heading Current heading in degrees, in compass units (0..360, 0=north)
-        DECIDEGREES_TO_DEGREES(attitude.values.yaw)
+        headingOrScaledMilliAmpereHoursDrawn()
     );
     msgLength = mavlink_msg_to_send_buffer(mavBuffer, &mavMsg);
     mavlinkSerialWrite(mavBuffer, msgLength);
 
     mavlink_msg_gps_global_origin_pack(0, 200, &mavMsg,
         // latitude Latitude (WGS84), expressed as * 1E7
-        GPS_home[LAT],
+        GPS_home[GPS_LATITUDE],
         // longitude Longitude (WGS84), expressed as * 1E7
-        GPS_home[LON],
+        GPS_home[GPS_LONGITUDE],
         // altitude Altitude(WGS84), expressed as * 1000
         0);
     msgLength = mavlink_msg_to_send_buffer(mavBuffer, &mavMsg);
@@ -408,24 +414,7 @@ void mavlinkSendHUDAndHeartbeat(void)
     }
 #endif
 
-    // select best source for altitude
-#if defined(USE_BARO) || defined(USE_RANGEFINDER)
-    if (sensors(SENSOR_RANGEFINDER) || sensors(SENSOR_BARO)) {
-        // Baro or sonar generally is a better estimate of altitude than GPS MSL altitude
-        mavAltitude = getEstimatedAltitude() / 100.0;
-    }
-#if defined(USE_GPS)
-    else if (sensors(SENSOR_GPS)) {
-        // No sonar or baro, just display altitude above MLS
-        mavAltitude = gpsSol.llh.alt;
-    }
-#endif
-#elif defined(USE_GPS)
-    if (sensors(SENSOR_GPS)) {
-        // No sonar or baro, just display altitude above MLS
-        mavAltitude = gpsSol.llh.alt;
-    }
-#endif
+    mavAltitude = getEstimatedAltitudeCm() / 100.0;
 
     mavlink_msg_vfr_hud_pack(0, 200, &mavMsg,
         // airspeed Current airspeed in m/s
@@ -433,7 +422,7 @@ void mavlinkSendHUDAndHeartbeat(void)
         // groundspeed Current ground speed in m/s
         mavGroundSpeed,
         // heading Current heading in degrees, in compass units (0..360, 0=north)
-        DECIDEGREES_TO_DEGREES(attitude.values.yaw),
+        headingOrScaledMilliAmpereHoursDrawn(),
         // throttle Current throttle setting in integer percent, 0 to 100
         scaleRange(constrain(rcData[THROTTLE], PWM_RANGE_MIN, PWM_RANGE_MAX), PWM_RANGE_MIN, PWM_RANGE_MAX, 0, 100),
         // alt Current altitude (MSL), in meters, if we have sonar or baro use them, otherwise use GPS (less accurate)
@@ -490,15 +479,6 @@ void mavlinkSendHUDAndHeartbeat(void)
     if (FLIGHT_MODE(ANGLE_MODE) || FLIGHT_MODE(HORIZON_MODE)) {
         mavCustomMode = 0;      //Stabilize
         mavModes |= MAV_MODE_FLAG_STABILIZE_ENABLED;
-    }
-    if (FLIGHT_MODE(BARO_MODE)) {
-        mavCustomMode = 2;      //Alt Hold
-    }
-    if (FLIGHT_MODE(GPS_HOME_MODE)) {
-        mavCustomMode = 6;      //Return to Launch
-    }
-    if (FLIGHT_MODE(GPS_HOLD_MODE)) {
-        mavCustomMode = 16;     //Position Hold (Earlier called Hybrid)
     }
 
     uint8_t mavSystemState = 0;

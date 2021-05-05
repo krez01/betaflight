@@ -46,6 +46,8 @@ int blackboxWriteString(const char *s);
 
 void blackboxDeviceFlush(void);
 bool blackboxDeviceFlushForce(void);
+bool blackboxDeviceFlushForceComplete(void);
+
 bool blackboxDeviceOpen(void);
 void blackboxDeviceClose(void);
 
@@ -56,7 +58,9 @@ bool blackboxDeviceBeginLog(void);
 bool blackboxDeviceEndLog(bool retainLog);
 
 bool isBlackboxDeviceFull(void);
-unsigned int blackboxGetLogNumber(void);
+bool isBlackboxDeviceWorking(void);
+int32_t blackboxGetLogNumber(void);
 
 void blackboxReplenishHeaderBudget(void);
 blackboxBufferReserveStatus_e blackboxDeviceReserveBufferSpace(int32_t bytes);
+int8_t blackboxGetLogFileNo(void);

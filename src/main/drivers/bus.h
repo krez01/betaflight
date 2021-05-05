@@ -29,14 +29,22 @@ typedef enum {
     BUSTYPE_NONE = 0,
     BUSTYPE_I2C,
     BUSTYPE_SPI,
-    BUSTYPE_MPU_SLAVE // Slave I2C on SPI master
+    BUSTYPE_MPU_SLAVE, // Slave I2C on SPI master
+    BUSTYPE_GYRO_AUTO,  // Only used by acc/gyro bus auto detection code
 } busType_e;
+
+struct spiDevice_s;
 
 typedef struct busDevice_s {
     busType_e bustype;
     union {
         struct deviceSpi_s {
             SPI_TypeDef *instance;
+#ifdef USE_SPI_TRANSACTION
+            struct SPIDevice_s *device;    // Back ptr to controller for this device.
+            // Cached SPI_CR1 for spiBusTransactionXXX
+            uint16_t modeCache;        // XXX cr1Value may be a better name?
+#endif
 #if defined(USE_HAL_DRIVER)
             SPI_HandleTypeDef* handle; // cached here for efficiency
 #endif
@@ -57,6 +65,14 @@ typedef struct busDevice_s {
 void targetBusInit(void);
 #endif
 
+bool busRawWriteRegister(const busDevice_t *bus, uint8_t reg, uint8_t data);
 bool busWriteRegister(const busDevice_t *bus, uint8_t reg, uint8_t data);
+bool busRawWriteRegisterStart(const busDevice_t *bus, uint8_t reg, uint8_t data);
+bool busWriteRegisterStart(const busDevice_t *bus, uint8_t reg, uint8_t data);
+bool busRawReadRegisterBuffer(const busDevice_t *bus, uint8_t reg, uint8_t *data, uint8_t length);
 bool busReadRegisterBuffer(const busDevice_t *bus, uint8_t reg, uint8_t *data, uint8_t length);
 uint8_t busReadRegister(const busDevice_t *bus, uint8_t reg);
+bool busRawReadRegisterBufferStart(const busDevice_t *busdev, uint8_t reg, uint8_t *data, uint8_t length);
+bool busReadRegisterBufferStart(const busDevice_t *busdev, uint8_t reg, uint8_t *data, uint8_t length);
+bool busBusy(const busDevice_t *busdev, bool *error);
+void busDeviceRegister(const busDevice_t *busdev);

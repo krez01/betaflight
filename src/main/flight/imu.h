@@ -26,10 +26,6 @@
 #include "pg/pg.h"
 
 // Exported symbols
-extern uint32_t accTimeSum;
-extern int accSumCount;
-extern float accVelScale;
-extern int32_t accSum[XYZ_AXIS_COUNT];
 extern bool canUseGPSHeading;
 extern float accAverage[XYZ_AXIS_COUNT];
 
@@ -55,18 +51,12 @@ typedef union {
 #define EULER_INITIALIZE  { { 0, 0, 0 } }
 
 extern attitudeEulerAngles_t attitude;
-
-typedef struct accDeadband_s {
-    uint8_t xy;                 // set the acc deadband for xy-Axis
-    uint8_t z;                  // set the acc deadband for z-Axis, this ignores small accelerations
-} accDeadband_t;
+extern float rMat[3][3];
 
 typedef struct imuConfig_s {
     uint16_t dcm_kp;                        // DCM filter proportional gain ( x 10000)
     uint16_t dcm_ki;                        // DCM filter integral gain ( x 10000)
     uint8_t small_angle;
-    uint8_t acc_unarmedcal;                 // turn automatic acc compensation on/off
-    accDeadband_t accDeadband;
 } imuConfig_t;
 
 PG_DECLARE(imuConfig_t, imuConfig);
@@ -74,9 +64,6 @@ PG_DECLARE(imuConfig_t, imuConfig);
 typedef struct imuRuntimeConfig_s {
     float dcm_ki;
     float dcm_kp;
-    uint8_t acc_unarmedcal;
-    uint8_t small_angle;
-    accDeadband_t accDeadband;
 } imuRuntimeConfig_t;
 
 void imuConfigure(uint16_t throttle_correction_angle, uint8_t throttle_correction_value);
@@ -85,7 +72,6 @@ float getCosTiltAngle(void);
 void getQuaternion(quaternion * q);
 void imuUpdateAttitude(timeUs_t currentTimeUs);
 
-void imuResetAccelerationSum(void);
 void imuInit(void);
 
 #ifdef SIMULATOR_BUILD
@@ -96,8 +82,7 @@ void imuSetHasNewData(uint32_t dt);
 #endif
 #endif
 
-void imuQuaternionComputeProducts(quaternion *quat, quaternionProducts *quatProd);
 bool imuQuaternionHeadfreeOffsetSet(void);
 void imuQuaternionHeadfreeTransformVectorEarthToBody(t_fp_vector_def * v);
-void imuComputeQuaternionFromRPY(quaternionProducts *qP, int16_t initialRoll, int16_t initialPitch, int16_t initialYaw);
 bool shouldInitializeGPSHeading(void);
+bool isUpright(void);

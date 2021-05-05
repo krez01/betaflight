@@ -49,6 +49,9 @@
 
 //#define DEBUG_MAG_DATA_READY_INTERRUPT
 
+// 10 MHz max SPI frequency
+#define HMC5883_MAX_SPI_CLK_HZ 10000000
+
 // HMC5883L, default address 0x1E
 // NAZE Target connections
 // PB12 connected to MAG_DRDY on rev4 hardware
@@ -172,18 +175,11 @@ static void hmc5883lConfigureDataReadyInterruptHandling(magDev_t* mag)
     }
 #endif
 
-#if defined (STM32F7)
     IOInit(magIntIO, OWNER_COMPASS_EXTI, 0);
     EXTIHandlerInit(&mag->exti, hmc5883_extiHandler);
-    EXTIConfig(magIntIO, &mag->exti, NVIC_PRIO_MPU_INT_EXTI, IO_CONFIG(GPIO_MODE_INPUT,0,GPIO_NOPULL));
+    EXTIConfig(magIntIO, &mag->exti, NVIC_PRIO_MPU_INT_EXTI, IOCFG_IN_FLOATING, BETAFLIGHT_EXTI_TRIGGER_RISING);
     EXTIEnable(magIntIO, true);
-#else
-    IOInit(magIntIO, OWNER_COMPASS_EXTI, 0);
-    IOConfigGPIO(magIntIO, IOCFG_IN_FLOATING);
-    EXTIHandlerInit(&mag->exti, hmc5883_extiHandler);
-    EXTIConfig(magIntIO, &mag->exti, NVIC_PRIO_MAG_INT_EXTI, EXTI_Trigger_Rising);
     EXTIEnable(magIntIO, true);
-#endif
 #else
     UNUSED(mag);
 #endif
@@ -192,12 +188,18 @@ static void hmc5883lConfigureDataReadyInterruptHandling(magDev_t* mag)
 #ifdef USE_MAG_SPI_HMC5883
 static void hmc5883SpiInit(busDevice_t *busdev)
 {
+    busDeviceRegister(busdev);
+
     IOHi(busdev->busdev_u.spi.csnPin); // Disable
 
     IOInit(busdev->busdev_u.spi.csnPin, OWNER_COMPASS_CS, 0);
     IOConfigGPIO(busdev->busdev_u.spi.csnPin, IOCFG_OUT_PP);
 
-    spiSetDivisor(busdev->busdev_u.spi.instance, SPI_CLOCK_STANDARD);
+#ifdef USE_SPI_TRANSACTION
+    spiBusTransactionInit(busdev, SPI_MODE3_POL_HIGH_EDGE_2ND, spiCalculateDivider(HMC5883_MAX_SPI_CLK_HZ));
+#else
+    spiBusSetDivisor(busdev, spiCalculateDivider(HMC5883_MAX_SPI_CLK_HZ));
+#endif
 }
 #endif
 
@@ -224,7 +226,6 @@ static bool hmc5883lInit(magDev_t *mag)
 {
 
     busDevice_t *busdev = &mag->busdev;
-
 
     // leave test mode
     busWriteRegister(busdev, HMC58X3_REG_CONFA, HMC_CONFA_8_SAMLES | HMC_CONFA_DOR_15HZ | HMC_CONFA_NORMAL);    // Configuration Register A  -- 0 11 100 00  num samples: 8 ; output rate: 15Hz ; normal measurement mode

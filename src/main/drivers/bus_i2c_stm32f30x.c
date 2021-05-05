@@ -32,6 +32,7 @@
 #include "drivers/io.h"
 #include "drivers/io_impl.h"
 #include "drivers/rcc.h"
+#include "drivers/time.h"
 
 #include "drivers/bus_i2c.h"
 #include "drivers/bus_i2c_impl.h"
@@ -43,8 +44,6 @@
 #define I2C_STANDARD_TIMING   0x00E0257A  // 400 Khz, 72Mhz Clock, Analog Filter Delay ON, Rise 100, Fall 10.
 
 #define I2C_GPIO_AF         GPIO_AF_4
-
-static uint32_t i2cTimeout;
 
 static volatile uint16_t i2cErrorCount = 0;
 
@@ -144,10 +143,12 @@ bool i2cWrite(I2CDevice device, uint8_t addr_, uint8_t reg, uint8_t data)
 
     addr_ <<= 1;
 
+    timeUs_t timeoutStartUs;
+
     /* Test on BUSY Flag */
-    i2cTimeout = I2C_LONG_TIMEOUT;
+    timeoutStartUs = microsISR();
     while (I2C_GetFlagStatus(I2Cx, I2C_ISR_BUSY) != RESET) {
-        if ((i2cTimeout--) == 0) {
+        if (cmpTimeUs(microsISR(), timeoutStartUs) >= I2C_TIMEOUT_US) {
             return i2cTimeoutUserCallback();
         }
     }
@@ -156,9 +157,9 @@ bool i2cWrite(I2CDevice device, uint8_t addr_, uint8_t reg, uint8_t data)
     I2C_TransferHandling(I2Cx, addr_, 1, I2C_Reload_Mode, I2C_Generate_Start_Write);
 
     /* Wait until TXIS flag is set */
-    i2cTimeout = I2C_LONG_TIMEOUT;
+    timeoutStartUs = microsISR();
     while (I2C_GetFlagStatus(I2Cx, I2C_ISR_TXIS) == RESET) {
-        if ((i2cTimeout--) == 0) {
+        if (cmpTimeUs(microsISR(), timeoutStartUs) >= I2C_TIMEOUT_US) {
             return i2cTimeoutUserCallback();
         }
     }
@@ -167,10 +168,9 @@ bool i2cWrite(I2CDevice device, uint8_t addr_, uint8_t reg, uint8_t data)
     I2C_SendData(I2Cx, (uint8_t) reg);
 
     /* Wait until TCR flag is set */
-    i2cTimeout = I2C_LONG_TIMEOUT;
-    while (I2C_GetFlagStatus(I2Cx, I2C_ISR_TCR) == RESET)
-    {
-        if ((i2cTimeout--) == 0) {
+    timeoutStartUs = microsISR();
+    while (I2C_GetFlagStatus(I2Cx, I2C_ISR_TCR) == RESET) {
+        if (cmpTimeUs(microsISR(), timeoutStartUs) >= I2C_TIMEOUT_US) {
             return i2cTimeoutUserCallback();
         }
     }
@@ -179,9 +179,9 @@ bool i2cWrite(I2CDevice device, uint8_t addr_, uint8_t reg, uint8_t data)
     I2C_TransferHandling(I2Cx, addr_, 1, I2C_AutoEnd_Mode, I2C_No_StartStop);
 
     /* Wait until TXIS flag is set */
-    i2cTimeout = I2C_LONG_TIMEOUT;
+    timeoutStartUs = microsISR();
     while (I2C_GetFlagStatus(I2Cx, I2C_ISR_TXIS) == RESET) {
-        if ((i2cTimeout--) == 0) {
+        if (cmpTimeUs(microsISR(), timeoutStartUs) >= I2C_TIMEOUT_US) {
             return i2cTimeoutUserCallback();
         }
     }
@@ -190,9 +190,9 @@ bool i2cWrite(I2CDevice device, uint8_t addr_, uint8_t reg, uint8_t data)
     I2C_SendData(I2Cx, data);
 
     /* Wait until STOPF flag is set */
-    i2cTimeout = I2C_LONG_TIMEOUT;
+    timeoutStartUs = microsISR();
     while (I2C_GetFlagStatus(I2Cx, I2C_ISR_STOPF) == RESET) {
-        if ((i2cTimeout--) == 0) {
+        if (cmpTimeUs(microsISR(), timeoutStartUs) >= I2C_TIMEOUT_US) {
             return i2cTimeoutUserCallback();
         }
     }
@@ -217,10 +217,12 @@ bool i2cRead(I2CDevice device, uint8_t addr_, uint8_t reg, uint8_t len, uint8_t*
 
     addr_ <<= 1;
 
+    timeUs_t timeoutStartUs;
+
     /* Test on BUSY Flag */
-    i2cTimeout = I2C_LONG_TIMEOUT;
+    timeoutStartUs = microsISR();
     while (I2C_GetFlagStatus(I2Cx, I2C_ISR_BUSY) != RESET) {
-        if ((i2cTimeout--) == 0) {
+        if (cmpTimeUs(microsISR(), timeoutStartUs) >= I2C_TIMEOUT_US) {
             return i2cTimeoutUserCallback();
         }
     }
@@ -229,9 +231,9 @@ bool i2cRead(I2CDevice device, uint8_t addr_, uint8_t reg, uint8_t len, uint8_t*
     I2C_TransferHandling(I2Cx, addr_, 1, I2C_SoftEnd_Mode, I2C_Generate_Start_Write);
 
     /* Wait until TXIS flag is set */
-    i2cTimeout = I2C_LONG_TIMEOUT;
+    timeoutStartUs = microsISR();
     while (I2C_GetFlagStatus(I2Cx, I2C_ISR_TXIS) == RESET) {
-        if ((i2cTimeout--) == 0) {
+        if (cmpTimeUs(microsISR(), timeoutStartUs) >= I2C_TIMEOUT_US) {
             return i2cTimeoutUserCallback();
         }
     }
@@ -240,9 +242,9 @@ bool i2cRead(I2CDevice device, uint8_t addr_, uint8_t reg, uint8_t len, uint8_t*
     I2C_SendData(I2Cx, (uint8_t) reg);
 
     /* Wait until TC flag is set */
-    i2cTimeout = I2C_LONG_TIMEOUT;
+    timeoutStartUs = microsISR();
     while (I2C_GetFlagStatus(I2Cx, I2C_ISR_TC) == RESET) {
-        if ((i2cTimeout--) == 0) {
+        if (cmpTimeUs(microsISR(), timeoutStartUs) >= I2C_TIMEOUT_US) {
             return i2cTimeoutUserCallback();
         }
     }
@@ -253,9 +255,9 @@ bool i2cRead(I2CDevice device, uint8_t addr_, uint8_t reg, uint8_t len, uint8_t*
     /* Wait until all data are received */
     while (len) {
         /* Wait until RXNE flag is set */
-        i2cTimeout = I2C_LONG_TIMEOUT;
+        timeoutStartUs = microsISR();
         while (I2C_GetFlagStatus(I2Cx, I2C_ISR_RXNE) == RESET) {
-            if ((i2cTimeout--) == 0) {
+            if (cmpTimeUs(microsISR(), timeoutStartUs) >= I2C_TIMEOUT_US) {
                 return i2cTimeoutUserCallback();
             }
         }
@@ -270,9 +272,9 @@ bool i2cRead(I2CDevice device, uint8_t addr_, uint8_t reg, uint8_t len, uint8_t*
     }
 
     /* Wait until STOPF flag is set */
-    i2cTimeout = I2C_LONG_TIMEOUT;
+    timeoutStartUs = microsISR();
     while (I2C_GetFlagStatus(I2Cx, I2C_ISR_STOPF) == RESET) {
-        if ((i2cTimeout--) == 0) {
+        if (cmpTimeUs(microsISR(), timeoutStartUs) >= I2C_TIMEOUT_US) {
             return i2cTimeoutUserCallback();
         }
     }
@@ -284,4 +286,27 @@ bool i2cRead(I2CDevice device, uint8_t addr_, uint8_t reg, uint8_t len, uint8_t*
     return true;
 }
 
+bool i2cWriteBuffer(I2CDevice device, uint8_t addr_, uint8_t reg_, uint8_t len_, uint8_t *data)
+{
+    bool status = true;
+
+    for (uint8_t i = 0; i < len_; i++) {
+        status &= i2cWrite(device, addr_, reg_ + i, data[i]);
+    }
+
+    return status;
+}
+
+bool i2cReadBuffer(I2CDevice device, uint8_t addr_, uint8_t reg, uint8_t len, uint8_t* buf)
+{
+    return i2cRead(device, addr_, reg, len, buf);
+}
+
+bool i2cBusy(I2CDevice device, bool *error)
+{
+    UNUSED(device);
+    UNUSED(error);
+
+    return false;
+}
 #endif

@@ -47,12 +47,10 @@
 #include "common/typeconversion.h"
 
 #include "config/feature.h"
-#include "pg/pg.h"
-#include "pg/pg_ids.h"
 #include "pg/dashboard.h"
 #include "pg/rx.h"
 
-#include "fc/config.h"
+#include "config/config.h"
 #include "fc/controlrate_profile.h"
 #include "fc/rc_controls.h"
 #include "fc/runtime_config.h"
@@ -64,6 +62,9 @@
 #include "io/gps.h"
 #include "io/dashboard.h"
 #include "io/displayport_oled.h"
+
+#include "blackbox/blackbox_io.h"
+#include "blackbox/blackbox.h"
 
 #include "rx/rx.h"
 
@@ -106,7 +107,7 @@ typedef struct pageEntry_s {
     uint8_t flags;
 } pageEntry_t;
 
-static const char* tickerCharacters = "|/-\\"; // use 2/4/8 characters so that the divide is optimal.
+static const char tickerCharacters[] = "|/-\\"; // use 2/4/8 characters so that the divide is optimal.
 #define TICKER_CHARACTER_COUNT (sizeof(tickerCharacters) / sizeof(char))
 
 typedef enum {
@@ -263,12 +264,12 @@ static void drawRxChannel(uint8_t channelIndex, uint8_t width)
 #define RX_CHANNELS_PER_PAGE_COUNT 14
 static void showRxPage(void)
 {
-    for (int channelIndex = 0; channelIndex < rxRuntimeConfig.channelCount && channelIndex < RX_CHANNELS_PER_PAGE_COUNT; channelIndex += 2) {
+    for (int channelIndex = 0; channelIndex < rxRuntimeState.channelCount && channelIndex < RX_CHANNELS_PER_PAGE_COUNT; channelIndex += 2) {
         i2c_OLED_set_line(bus, (channelIndex / 2) + PAGE_TITLE_LINE_COUNT);
 
         drawRxChannel(channelIndex, HALF_SCREEN_CHARACTER_COLUMN_COUNT);
 
-        if (channelIndex >= rxRuntimeConfig.channelCount) {
+        if (channelIndex >= rxRuntimeState.channelCount) {
             continue;
         }
 
@@ -317,6 +318,11 @@ static void showProfilePage(void)
         i2c_OLED_set_line(bus, rowIndex++);
         i2c_OLED_send_string(bus, lineBuffer);
     }
+}
+
+static void showRateProfilePage(void)
+{
+    uint8_t rowIndex = PAGE_TITLE_LINE_COUNT;
 
     const uint8_t currentRateProfileIndex = getCurrentControlRateProfileIndex();
     tfp_sprintf(lineBuffer, "Rate profile: %d", currentRateProfileIndex);
@@ -324,7 +330,13 @@ static void showProfilePage(void)
     i2c_OLED_send_string(bus, lineBuffer);
 
     const controlRateConfig_t *controlRateConfig = controlRateProfiles(currentRateProfileIndex);
-    tfp_sprintf(lineBuffer, "RRr:%d PRR:%d YRR:%d",
+
+    tfp_sprintf(lineBuffer, "         R   P   Y");
+    padLineBuffer();
+    i2c_OLED_set_line(bus, rowIndex++);
+    i2c_OLED_send_string(bus, lineBuffer);
+
+    tfp_sprintf(lineBuffer, "RcRate %3d %3d %3d",
         controlRateConfig->rcRates[FD_ROLL],
         controlRateConfig->rcRates[FD_PITCH],
         controlRateConfig->rcRates[FD_YAW]
@@ -333,16 +345,7 @@ static void showProfilePage(void)
     i2c_OLED_set_line(bus, rowIndex++);
     i2c_OLED_send_string(bus, lineBuffer);
 
-    tfp_sprintf(lineBuffer, "RE:%d PE:%d YE:%d",
-        controlRateConfig->rcExpo[FD_ROLL],
-        controlRateConfig->rcExpo[FD_PITCH],
-        controlRateConfig->rcExpo[FD_YAW]
-    );
-    padLineBuffer();
-    i2c_OLED_set_line(bus, rowIndex++);
-    i2c_OLED_send_string(bus, lineBuffer);
-
-    tfp_sprintf(lineBuffer, "RR:%d PR:%d YR:%d",
+    tfp_sprintf(lineBuffer, "Super  %3d %3d %3d",
         controlRateConfig->rates[FD_ROLL],
         controlRateConfig->rates[FD_PITCH],
         controlRateConfig->rates[FD_YAW]
@@ -350,14 +353,24 @@ static void showProfilePage(void)
     padLineBuffer();
     i2c_OLED_set_line(bus, rowIndex++);
     i2c_OLED_send_string(bus, lineBuffer);
+
+    tfp_sprintf(lineBuffer, "Expo   %3d %3d %3d",
+        controlRateConfig->rcExpo[FD_ROLL],
+        controlRateConfig->rcExpo[FD_PITCH],
+        controlRateConfig->rcExpo[FD_YAW]
+    );
+    padLineBuffer();
+    i2c_OLED_set_line(bus, rowIndex++);
+    i2c_OLED_send_string(bus, lineBuffer);
 }
+
 #define SATELLITE_COUNT (sizeof(GPS_svinfo_cno) / sizeof(GPS_svinfo_cno[0]))
 #define SATELLITE_GRAPH_LEFT_OFFSET ((SCREEN_CHARACTER_COLUMN_COUNT - SATELLITE_COUNT) / 2)
 
 #ifdef USE_GPS
 static void showGpsPage(void)
 {
-    if (!feature(FEATURE_GPS)) {
+    if (!featureIsEnabled(FEATURE_GPS)) {
         pageState.pageFlags |= PAGE_STATE_FLAG_FORCE_PAGE_CHANGE;
         return;
     }
@@ -411,7 +424,7 @@ static void showGpsPage(void)
     i2c_OLED_set_line(bus, rowIndex);
     i2c_OLED_send_string(bus, lineBuffer);
 
-    tfp_sprintf(lineBuffer, "ERRs: %d", gpsData.errors, gpsData.timeouts);
+    tfp_sprintf(lineBuffer, "ERRs: %d", gpsData.errors);
     padHalfLineBuffer();
     i2c_OLED_set_xy(bus, HALF_SCREEN_CHARACTER_COLUMN_COUNT, rowIndex++);
     i2c_OLED_send_string(bus, lineBuffer);
@@ -438,7 +451,7 @@ static void showBatteryPage(void)
     uint8_t rowIndex = PAGE_TITLE_LINE_COUNT;
 
     if (batteryConfig()->voltageMeterSource != VOLTAGE_METER_NONE) {
-        tfp_sprintf(lineBuffer, "Volts: %d.%1d Cells: %d", getBatteryVoltage() / 10, getBatteryVoltage() % 10, getBatteryCellCount());
+        tfp_sprintf(lineBuffer, "Volts: %d.%02d Cells: %d", getBatteryVoltage() / 100, getBatteryVoltage() % 100, getBatteryCellCount());
         padLineBuffer();
         i2c_OLED_set_line(bus, rowIndex++);
         i2c_OLED_send_string(bus, lineBuffer);
@@ -451,7 +464,9 @@ static void showBatteryPage(void)
     if (batteryConfig()->currentMeterSource != CURRENT_METER_NONE) {
 
         int32_t amperage = getAmperage();
-        tfp_sprintf(lineBuffer, "Amps: %d.%2d mAh: %d", amperage / 100, amperage % 100, getMAhDrawn());
+        // 123456789012345678901
+        // Amp: DDD.D mAh: DDDDD
+        tfp_sprintf(lineBuffer, "Amp: %d.%d mAh: %d", amperage / 100, (amperage % 100) / 10, getMAhDrawn());
         padLineBuffer();
         i2c_OLED_set_line(bus, rowIndex++);
         i2c_OLED_send_string(bus, lineBuffer);
@@ -470,12 +485,14 @@ static void showSensorsPage(void)
     i2c_OLED_set_line(bus, rowIndex++);
     i2c_OLED_send_string(bus, "        X     Y     Z");
 
+#if defined(USE_ACC)
     if (sensors(SENSOR_ACC)) {
         tfp_sprintf(lineBuffer, format, "ACC", lrintf(acc.accADC[X]), lrintf(acc.accADC[Y]), lrintf(acc.accADC[Z]));
         padLineBuffer();
         i2c_OLED_set_line(bus, rowIndex++);
         i2c_OLED_send_string(bus, lineBuffer);
     }
+#endif
 
     if (sensors(SENSOR_GYRO)) {
         tfp_sprintf(lineBuffer, format, "GYR", lrintf(gyro.gyroADCf[X]), lrintf(gyro.gyroADCf[Y]), lrintf(gyro.gyroADCf[Z]));
@@ -526,7 +543,7 @@ static void showSensorsPage(void)
 
 }
 
-#ifndef SKIP_TASK_STATISTICS
+#if defined(USE_TASK_STATISTICS)
 static void showTasksPage(void)
 {
     uint8_t rowIndex = PAGE_TITLE_LINE_COUNT;
@@ -534,14 +551,14 @@ static void showTasksPage(void)
 
     i2c_OLED_set_line(bus, rowIndex++);
     i2c_OLED_send_string(bus, "Task max  avg mx% av%");
-    cfTaskInfo_t taskInfo;
-    for (cfTaskId_e taskId = 0; taskId < TASK_COUNT; ++taskId) {
+    taskInfo_t taskInfo;
+    for (taskId_e taskId = 0; taskId < TASK_COUNT; ++taskId) {
         getTaskInfo(taskId, &taskInfo);
         if (taskInfo.isEnabled && taskId != TASK_SERIAL) {// don't waste a line of the display showing serial taskInfo
-            const int taskFrequency = (int)(1000000.0f / ((float)taskInfo.latestDeltaTime));
-            const int maxLoad = (taskInfo.maxExecutionTime * taskFrequency + 5000) / 10000;
-            const int averageLoad = (taskInfo.averageExecutionTime * taskFrequency + 5000) / 10000;
-            tfp_sprintf(lineBuffer, format, taskId, taskInfo.maxExecutionTime, taskInfo.averageExecutionTime, maxLoad, averageLoad);
+            const int taskFrequency = (int)(1000000.0f / ((float)taskInfo.latestDeltaTimeUs));
+            const int maxLoad = (taskInfo.maxExecutionTimeUs * taskFrequency + 5000) / 10000;
+            const int averageLoad = (taskInfo.averageExecutionTimeUs * taskFrequency + 5000) / 10000;
+            tfp_sprintf(lineBuffer, format, taskId, taskInfo.maxExecutionTimeUs, taskInfo.averageExecutionTimeUs, maxLoad, averageLoad);
             padLineBuffer();
             i2c_OLED_set_line(bus, rowIndex++);
             i2c_OLED_send_string(bus, lineBuffer);
@@ -550,6 +567,35 @@ static void showTasksPage(void)
             }
         }
     }
+}
+#endif
+
+#ifdef USE_BLACKBOX
+static void showBBPage(void)
+{
+    uint8_t rowIndex = PAGE_TITLE_LINE_COUNT;
+    int8_t fileNo;
+    if (isBlackboxDeviceWorking()) {
+        switch (blackboxConfig()->device) {
+        case BLACKBOX_DEVICE_SDCARD:
+            fileNo = blackboxGetLogFileNo();
+            if( fileNo > 0) {
+                tfp_sprintf(lineBuffer, "File no: %d", fileNo);
+            } else {
+                tfp_sprintf(lineBuffer, "Not ready yet");
+            }
+            break;
+        default:
+            tfp_sprintf(lineBuffer, "Not supp. dev.");
+            break;
+        }
+    } else {
+        tfp_sprintf(lineBuffer, "BB not working");
+    }
+
+    padLineBuffer();
+    i2c_OLED_set_line(bus, rowIndex++);
+    i2c_OLED_send_string(bus, lineBuffer);
 }
 #endif
 
@@ -566,18 +612,23 @@ static void showDebugPage(void)
 }
 #endif
 
+
 static const pageEntry_t pages[PAGE_COUNT] = {
     { PAGE_WELCOME, FC_FIRMWARE_NAME,  showWelcomePage,    PAGE_FLAGS_SKIP_CYCLING },
     { PAGE_ARMED,   "ARMED",           showArmedPage,      PAGE_FLAGS_SKIP_CYCLING },
     { PAGE_PROFILE, "PROFILE",         showProfilePage,    PAGE_FLAGS_NONE },
+    { PAGE_RPROF,   "RATE PROFILE",    showRateProfilePage,PAGE_FLAGS_NONE },
 #ifdef USE_GPS
     { PAGE_GPS,     "GPS",             showGpsPage,        PAGE_FLAGS_NONE },
 #endif
     { PAGE_RX,      "RX",              showRxPage,         PAGE_FLAGS_NONE },
     { PAGE_BATTERY, "BATTERY",         showBatteryPage,    PAGE_FLAGS_NONE },
     { PAGE_SENSORS, "SENSORS",         showSensorsPage,    PAGE_FLAGS_NONE },
-#ifndef SKIP_TASK_STATISTICS
+#if defined(USE_TASK_STATISTICS)
     { PAGE_TASKS,   "TASKS",           showTasksPage,      PAGE_FLAGS_NONE },
+#endif
+#ifdef USE_BLACKBOX
+    { PAGE_BB,      "BLACK BOX",       showBBPage,         PAGE_FLAGS_NONE },
 #endif
 #ifdef ENABLE_DEBUG_DASHBOARD_PAGE
     { PAGE_DEBUG,   "DEBUG",           showDebugPage,      PAGE_FLAGS_NONE },

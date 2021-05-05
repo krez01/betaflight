@@ -29,10 +29,13 @@
 
 // Undefine this for use libc sinf/cosf. Keep this defined to use fast sin/cos approximations
 #define FAST_MATH             // order 9 approximation
-#define VERY_FAST_MATH      // order 7 approximation
+#define VERY_FAST_MATH        // order 7 approximation
 
 // Use floating point M_PI instead explicitly.
 #define M_PIf       3.14159265358979323846f
+#define M_EULERf    2.71828182845904523536f
+#define M_SQRT2f    1.41421356237309504880f
+#define M_LN2f      0.69314718055994530942f
 
 #define RAD    (M_PIf / 180.0f)
 #define DEGREES_TO_DECIDEGREES(angle) ((angle) * 10)
@@ -57,6 +60,7 @@
 
 #define Q12 (1 << 12)
 
+#define HZ_TO_INTERVAL(x) (1.0f / (x))
 #define HZ_TO_INTERVAL_US(x) (1000000 / (x))
 
 typedef int32_t fix12_t;
@@ -92,8 +96,11 @@ typedef union {
     fp_angles_def angles;
 } fp_angles_t;
 
+typedef struct fp_rotationMatrix_s {
+    float m[3][3];              // matrix
+} fp_rotationMatrix_t;
+
 int gcd(int num, int denom);
-float powerf(float base, int exp);
 int32_t applyDeadband(int32_t value, int32_t deadband);
 float fapplyDeadband(float value, float deadband);
 
@@ -109,7 +116,8 @@ float scaleRangef(float x, float srcFrom, float srcTo, float destFrom, float des
 void normalizeV(struct fp_vector *src, struct fp_vector *dest);
 
 void rotateV(struct fp_vector *v, fp_angles_t *delta);
-void buildRotationMatrix(fp_angles_t *delta, float matrix[3][3]);
+void buildRotationMatrix(fp_angles_t *delta, fp_rotationMatrix_t *rotation);
+void applyRotation(float *v, fp_rotationMatrix_t *rotationMatrix);
 
 int32_t quickMedianFilter3(int32_t * v);
 int32_t quickMedianFilter5(int32_t * v);
@@ -131,8 +139,8 @@ float exp_approx(float val);
 float log_approx(float val);
 float pow_approx(float a, float b);
 #else
-#define sin_approx(x)   sinf(x)
-#define cos_approx(x)   cosf(x)
+#define sin_approx(x)       sinf(x)
+#define cos_approx(x)       cosf(x)
 #define atan2_approx(y,x)   atan2f(y,x)
 #define acos_approx(x)      acosf(x)
 #define tan_approx(x)       tanf(x)

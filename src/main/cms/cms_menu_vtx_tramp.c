@@ -21,6 +21,8 @@
 #include <stdbool.h>
 #include <stdint.h>
 #include <ctype.h>
+#include <string.h>
+#include <drivers/vtx_table.h>
 
 #include "platform.h"
 
@@ -34,9 +36,8 @@
 
 #include "drivers/vtx_common.h"
 
-#include "fc/config.h"
+#include "config/config.h"
 
-#include "io/vtx_string.h"
 #include "io/vtx_tramp.h"
 #include "io/vtx.h"
 
@@ -44,24 +45,48 @@ char trampCmsStatusString[31] = "- -- ---- ----";
 //                               m bc ffff tppp
 //                               01234567890123
 
+static int16_t trampCmsTemp;
+static OSD_INT16_t trampCmsEntTemp = { &trampCmsTemp, -100, 300, 0 };
+
 void trampCmsUpdateStatusString(void)
 {
+    vtxDevice_t *vtxDevice = vtxCommonDevice();
+
+    if (vtxTableBandCount == 0 || vtxTablePowerLevels == 0) {
+        strncpy(trampCmsStatusString, "PLEASE CONFIGURE VTXTABLE", sizeof(trampCmsStatusString));
+        return;
+    }
+
     trampCmsStatusString[0] = '*';
     trampCmsStatusString[1] = ' ';
-    trampCmsStatusString[2] = vtx58BandLetter[trampBand];
-    trampCmsStatusString[3] = vtx58ChannelNames[trampChannel][0];
+    uint8_t band;
+    uint8_t chan;
+    if (!vtxCommonGetBandAndChannel(vtxDevice, &band, &chan) || (band == 0 && chan == 0)) {
+        trampCmsStatusString[2] = 'U';//user freq
+        trampCmsStatusString[3] = 'F';
+    } else {
+        trampCmsStatusString[2] = vtxCommonLookupBandLetter(vtxDevice, band);
+        trampCmsStatusString[3] = vtxCommonLookupChannelName(vtxDevice, chan)[0];
+    }
     trampCmsStatusString[4] = ' ';
 
-    if (trampCurFreq)
-        tfp_sprintf(&trampCmsStatusString[5], "%4d", trampCurFreq);
-    else
+    uint16_t freq;
+    if (!vtxCommonGetFrequency(vtxDevice, &freq) || (freq == 0)) {
         tfp_sprintf(&trampCmsStatusString[5], "----");
-
-    if (trampPower) {
-        tfp_sprintf(&trampCmsStatusString[9], " %c%3d", (trampPower == trampConfiguredPower) ? ' ' : '*', trampPower);
+    } else {
+        tfp_sprintf(&trampCmsStatusString[5], "%4d", freq);
     }
-    else
+
+    uint16_t actualPower = vtxTrampGetCurrentActualPower();
+    uint8_t powerIndex;
+    uint16_t powerValue;
+    if (actualPower > 0 && vtxCommonGetPowerIndex(vtxDevice, &powerIndex) && vtxCommonLookupPowerValue(vtxDevice, powerIndex, &powerValue)) {
+        tfp_sprintf(&trampCmsStatusString[9], " %c%3d", (actualPower == powerValue) ? ' ' : '*', actualPower);
+    } else {
         tfp_sprintf(&trampCmsStatusString[9], " ----");
+    }
+
+    trampCmsTemp = vtxTrampGetCurrentTemp();
 }
 
 uint8_t trampCmsPitMode = 0;
@@ -69,63 +94,68 @@ uint8_t trampCmsBand = 1;
 uint8_t trampCmsChan = 1;
 uint16_t trampCmsFreqRef;
 
-static OSD_TAB_t trampCmsEntBand = { &trampCmsBand, VTX_TRAMP_BAND_COUNT, vtx58BandNames };
-
-static OSD_TAB_t trampCmsEntChan = { &trampCmsChan, VTX_TRAMP_CHANNEL_COUNT, vtx58ChannelNames };
+static OSD_TAB_t trampCmsEntBand;
+static OSD_TAB_t trampCmsEntChan;
 
 static OSD_UINT16_t trampCmsEntFreqRef = { &trampCmsFreqRef, 5600, 5900, 0 };
 
 static uint8_t trampCmsPower = 1;
 
-static OSD_TAB_t trampCmsEntPower = { &trampCmsPower, sizeof(trampPowerTable), trampPowerNames };
+static OSD_TAB_t trampCmsEntPower;
 
 static void trampCmsUpdateFreqRef(void)
 {
-    if (trampCmsBand > 0 && trampCmsChan > 0)
-        trampCmsFreqRef = vtx58frequencyTable[trampCmsBand - 1][trampCmsChan - 1];
+    if (trampCmsBand > 0 && trampCmsChan > 0) {
+        trampCmsFreqRef = vtxCommonLookupFrequency(vtxCommonDevice(), trampCmsBand, trampCmsChan);
+    }
 }
 
-static long trampCmsConfigBand(displayPort_t *pDisp, const void *self)
+static const void *trampCmsConfigBand(displayPort_t *pDisp, const void *self)
 {
     UNUSED(pDisp);
     UNUSED(self);
 
-    if (trampCmsBand == 0)
+    if (trampCmsBand == 0) {
         // Bounce back
         trampCmsBand = 1;
-    else
+    } else {
         trampCmsUpdateFreqRef();
+    }
 
-    return 0;
+    return NULL;
 }
 
-static long trampCmsConfigChan(displayPort_t *pDisp, const void *self)
+static const void *trampCmsConfigChan(displayPort_t *pDisp, const void *self)
 {
     UNUSED(pDisp);
     UNUSED(self);
 
-    if (trampCmsChan == 0)
+    if (trampCmsChan == 0) {
         // Bounce back
         trampCmsChan = 1;
-    else
+    } else {
         trampCmsUpdateFreqRef();
+    }
 
-    return 0;
+    return NULL;
 }
 
-static long trampCmsConfigPower(displayPort_t *pDisp, const void *self)
+static const void *trampCmsConfigPower(displayPort_t *pDisp, const void *self)
 {
     UNUSED(pDisp);
     UNUSED(self);
 
-    if (trampCmsPower == 0)
+    if (trampCmsPower == 0) {
         // Bounce back
         trampCmsPower = 1;
+    }
 
-    return 0;
+    return NULL;
 }
 
-static OSD_INT16_t trampCmsEntTemp = { &trampTemperature, -100, 300, 0 };
+#define TRAMP_PIT_STATUS_NA (0)
+#define TRAMP_PIT_STATUS_OFF (1)
+#define TRAMP_PIT_STATUS_ON (2)
 
 static const char * const trampCmsPitModeNames[] = {
     "---", "OFF", "ON "
@@ -133,71 +163,94 @@ static const char * const trampCmsPitModeNames[] = {
 
 static OSD_TAB_t trampCmsEntPitMode = { &trampCmsPitMode, 2, trampCmsPitModeNames };
 
-static long trampCmsSetPitMode(displayPort_t *pDisp, const void *self)
+static const void *trampCmsSetPitMode(displayPort_t *pDisp, const void *self)
 {
     UNUSED(pDisp);
     UNUSED(self);
 
-    if (trampCmsPitMode == 0) {
+    if (trampCmsPitMode == TRAMP_PIT_STATUS_NA) {
         // Bouce back
-        trampCmsPitMode = 1;
+        trampCmsPitMode = TRAMP_PIT_STATUS_OFF;
     } else {
-        trampSetPitMode(trampCmsPitMode - 1);
+        vtxCommonSetPitMode(vtxCommonDevice(),
+                            (trampCmsPitMode == TRAMP_PIT_STATUS_OFF) ? 0 : 1);
     }
 
-    return 0;
+    return NULL;
 }
 
-static long trampCmsCommence(displayPort_t *pDisp, const void *self)
+static const void *trampCmsCommence(displayPort_t *pDisp, const void *self)
 {
     UNUSED(pDisp);
     UNUSED(self);
 
-    trampSetBandAndChannel(trampCmsBand, trampCmsChan);
-    trampSetRFPower(trampPowerTable[trampCmsPower-1]);
-
-    // If it fails, the user should retry later
-    trampCommitChanges();
+    vtxDevice_t *device = vtxCommonDevice();
+    vtxCommonSetBandAndChannel(device, trampCmsBand, trampCmsChan);
+    vtxCommonSetPowerByIndex(device, trampCmsPower);
 
     // update'vtx_' settings
     vtxSettingsConfigMutable()->band = trampCmsBand;
     vtxSettingsConfigMutable()->channel = trampCmsChan;
     vtxSettingsConfigMutable()->power = trampCmsPower;
-    vtxSettingsConfigMutable()->freq = vtx58_Bandchan2Freq(trampCmsBand, trampCmsChan);
+    vtxSettingsConfigMutable()->freq = vtxCommonLookupFrequency(vtxCommonDevice(), trampCmsBand, trampCmsChan);
 
     saveConfigAndNotify();
 
     return MENU_CHAIN_BACK;
 }
 
-static void trampCmsInitSettings(void)
+static bool trampCmsInitSettings(void)
 {
-    if (trampBand > 0) trampCmsBand = trampBand;
-    if (trampChannel > 0) trampCmsChan = trampChannel;
+    vtxDevice_t *device = vtxCommonDevice();
+    unsigned vtxStatus;
+
+    if (!device) {
+        return false;
+    }
+
+    vtxCommonGetBandAndChannel(device, &trampCmsBand, &trampCmsChan);
 
     trampCmsUpdateFreqRef();
-    trampCmsPitMode = trampPitMode + 1;
-
-    if (trampConfiguredPower > 0) {
-        for (uint8_t i = 0; i < VTX_TRAMP_POWER_COUNT; i++) {
-            if (trampConfiguredPower <= trampPowerTable[i]) {
-                trampCmsPower = i + 1;
-                break;
-            }
-        }
+    if (vtxCommonGetStatus(device, &vtxStatus)) {
+        trampCmsPitMode = (vtxStatus & VTX_STATUS_PIT_MODE) ? TRAMP_PIT_STATUS_ON : TRAMP_PIT_STATUS_OFF;
+    } else {
+        trampCmsPitMode = TRAMP_PIT_STATUS_NA;
     }
+
+    if (!vtxCommonGetPowerIndex(vtxCommonDevice(), &trampCmsPower)) {
+        trampCmsPower = 1;
+    }
+
+    trampCmsEntBand.val = &trampCmsBand;
+    trampCmsEntBand.max = vtxTableBandCount;
+    trampCmsEntBand.names = vtxTableBandNames;
+
+    trampCmsEntChan.val = &trampCmsChan;
+    trampCmsEntChan.max = vtxTableChannelCount;
+    trampCmsEntChan.names = vtxTableChannelNames;
+
+    trampCmsEntPower.val = &trampCmsPower;
+    trampCmsEntPower.max = vtxTablePowerLevels;
+    trampCmsEntPower.names = vtxTablePowerLabels;
+
+    return true;
 }
 
-static long trampCmsOnEnter(void)
+static const void *trampCmsOnEnter(displayPort_t *pDisp)
 {
-    trampCmsInitSettings();
-    return 0;
+    UNUSED(pDisp);
+
+    if (!trampCmsInitSettings()) {
+        return MENU_CHAIN_BACK;
+    }
+
+    return NULL;
 }
 
-static OSD_Entry trampCmsMenuCommenceEntries[] = {
+static const OSD_Entry trampCmsMenuCommenceEntries[] = {
     { "CONFIRM", OME_Label,   NULL,          NULL, 0 },
     { "YES",     OME_Funcall, trampCmsCommence, NULL, 0 },
-    { "BACK",    OME_Back, NULL, NULL, 0 },
+    { "NO",    OME_Back, NULL, NULL, 0 },
     { NULL,      OME_END, NULL, NULL, 0 }
 };
 
@@ -208,10 +261,11 @@ static CMS_Menu trampCmsMenuCommence = {
 #endif
     .onEnter = NULL,
     .onExit = NULL,
+    .onDisplayUpdate = NULL,
     .entries = trampCmsMenuCommenceEntries,
 };
 
-static OSD_Entry trampMenuEntries[] =
+static const OSD_Entry trampMenuEntries[] =
 {
     { "- TRAMP -", OME_Label, NULL, NULL, 0 },
 
@@ -235,6 +289,7 @@ CMS_Menu cmsx_menuVtxTramp = {
 #endif
     .onEnter = trampCmsOnEnter,
     .onExit = NULL,
+    .onDisplayUpdate = NULL,
     .entries = trampMenuEntries,
 };
 #endif

@@ -29,6 +29,19 @@ typedef struct pt1Filter_s {
     float k;
 } pt1Filter_t;
 
+typedef struct pt2Filter_s {
+    float state;
+    float state1;
+    float k;
+} pt2Filter_t;
+
+typedef struct pt3Filter_s {
+    float state;
+    float state1;
+    float state2;
+    float k;
+} pt3Filter_t;
+
 typedef struct slewFilter_s {
     float state;
     float slewLimit;
@@ -52,6 +65,8 @@ typedef struct laggedMovingAverage_s {
 typedef enum {
     FILTER_PT1 = 0,
     FILTER_BIQUAD,
+    FILTER_PT2,
+    FILTER_PT3,
 } lowpassFilterType_e;
 
 typedef enum {
@@ -76,10 +91,20 @@ float filterGetNotchQ(float centerFreq, float cutoffFreq);
 void laggedMovingAverageInit(laggedMovingAverage_t *filter, uint16_t windowSize, float *buf);
 float laggedMovingAverageUpdate(laggedMovingAverage_t *filter, float input);
 
-float pt1FilterGain(uint16_t f_cut, float dT);
+float pt1FilterGain(float f_cut, float dT);
 void pt1FilterInit(pt1Filter_t *filter, float k);
 void pt1FilterUpdateCutoff(pt1Filter_t *filter, float k);
 float pt1FilterApply(pt1Filter_t *filter, float input);
+
+float pt2FilterGain(float f_cut, float dT);
+void pt2FilterInit(pt2Filter_t *filter, float k);
+void pt2FilterUpdateCutoff(pt2Filter_t *filter, float k);
+float pt2FilterApply(pt2Filter_t *filter, float input);
+
+float pt3FilterGain(float f_cut, float dT);
+void pt3FilterInit(pt3Filter_t *filter, float k);
+void pt3FilterUpdateCutoff(pt3Filter_t *filter, float k);
+float pt3FilterApply(pt3Filter_t *filter, float input);
 
 void slewFilterInit(slewFilter_t *filter, float slewLimit, float threshold);
 float slewFilterApply(slewFilter_t *filter, float input);

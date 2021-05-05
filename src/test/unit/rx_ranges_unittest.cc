@@ -37,11 +37,14 @@ extern "C" {
 #include "gtest/gtest.h"
 
 extern "C" {
+
+PG_REGISTER(flight3DConfig_t, flight3DConfig, PG_MOTOR_3D_CONFIG, 0);
+
 boxBitmask_t rcModeActivationMask;
 int16_t debug[DEBUG16_VALUE_COUNT];
 uint8_t debugMode = 0;
 
-extern uint16_t applyRxChannelRangeConfiguraton(int sample, const rxChannelRangeConfig_t *range);
+extern float applyRxChannelRangeConfiguraton(float sample, const rxChannelRangeConfig_t *range);
 }
 
 #define RANGE_CONFIGURATION(min, max) new (rxChannelRangeConfig_t) {min, max}
@@ -104,93 +107,94 @@ extern "C" {
 
 void failsafeOnRxSuspend(uint32_t ) {}
 void failsafeOnRxResume(void) {}
+bool taskUpdateRxMainInProgress() { return true; }
 
 uint32_t micros(void) { return 0; }
 uint32_t millis(void) { return 0; }
 
-void rxPwmInit(rxRuntimeConfig_t *rxRuntimeConfig, rcReadRawDataFnPtr *callback)
+void rxPwmInit(rxRuntimeState_t *rxRuntimeState, rcReadRawDataFnPtr *callback)
 {
-    UNUSED(rxRuntimeConfig);
+    UNUSED(rxRuntimeState);
     UNUSED(callback);
 }
 
-bool sbusInit(rxConfig_t *initialRxConfig, rxRuntimeConfig_t *rxRuntimeConfig, rcReadRawDataFnPtr *callback)
+bool sbusInit(rxConfig_t *initialRxConfig, rxRuntimeState_t *rxRuntimeState, rcReadRawDataFnPtr *callback)
 {
     UNUSED(initialRxConfig);
-    UNUSED(rxRuntimeConfig);
+    UNUSED(rxRuntimeState);
     UNUSED(callback);
     return true;
 }
 
-bool spektrumInit(rxConfig_t *rxConfig, rxRuntimeConfig_t *rxRuntimeConfig, rcReadRawDataFnPtr *callback)
+bool spektrumInit(rxConfig_t *rxConfig, rxRuntimeState_t *rxRuntimeState, rcReadRawDataFnPtr *callback)
 {
     UNUSED(rxConfig);
-    UNUSED(rxRuntimeConfig);
+    UNUSED(rxRuntimeState);
     UNUSED(callback);
     return true;
 }
 
-bool sumdInit(rxConfig_t *rxConfig, rxRuntimeConfig_t *rxRuntimeConfig, rcReadRawDataFnPtr *callback)
+bool sumdInit(rxConfig_t *rxConfig, rxRuntimeState_t *rxRuntimeState, rcReadRawDataFnPtr *callback)
 {
     UNUSED(rxConfig);
-    UNUSED(rxRuntimeConfig);
+    UNUSED(rxRuntimeState);
     UNUSED(callback);
     return true;
 }
 
-bool sumhInit(rxConfig_t *rxConfig, rxRuntimeConfig_t *rxRuntimeConfig, rcReadRawDataFnPtr *callback)
+bool sumhInit(rxConfig_t *rxConfig, rxRuntimeState_t *rxRuntimeState, rcReadRawDataFnPtr *callback)
 {
     UNUSED(rxConfig);
-    UNUSED(rxRuntimeConfig);
+    UNUSED(rxRuntimeState);
     UNUSED(callback);
     return true;
 }
 
-bool crsfRxInit(rxConfig_t *rxConfig, rxRuntimeConfig_t *rxRuntimeConfig, rcReadRawDataFnPtr *callback)
+bool crsfRxInit(rxConfig_t *rxConfig, rxRuntimeState_t *rxRuntimeState, rcReadRawDataFnPtr *callback)
 {
     UNUSED(rxConfig);
-    UNUSED(rxRuntimeConfig);
+    UNUSED(rxRuntimeState);
     UNUSED(callback);
     return true;
 }
 
-bool jetiExBusInit(rxConfig_t *rxConfig, rxRuntimeConfig_t *rxRuntimeConfig, rcReadRawDataFnPtr *callback)
+bool jetiExBusInit(rxConfig_t *rxConfig, rxRuntimeState_t *rxRuntimeState, rcReadRawDataFnPtr *callback)
 {
     UNUSED(rxConfig);
-    UNUSED(rxRuntimeConfig);
+    UNUSED(rxRuntimeState);
     UNUSED(callback);
     return true;
 }
 
-bool ibusInit(rxConfig_t *rxConfig, rxRuntimeConfig_t *rxRuntimeConfig, rcReadRawDataFnPtr *callback)
+bool ibusInit(rxConfig_t *rxConfig, rxRuntimeState_t *rxRuntimeState, rcReadRawDataFnPtr *callback)
 {
     UNUSED(rxConfig);
-    UNUSED(rxRuntimeConfig);
+    UNUSED(rxRuntimeState);
     UNUSED(callback);
     return true;
 }
 
-bool xBusInit(rxConfig_t *rxConfig, rxRuntimeConfig_t *rxRuntimeConfig, rcReadRawDataFnPtr *callback)
+bool xBusInit(rxConfig_t *rxConfig, rxRuntimeState_t *rxRuntimeState, rcReadRawDataFnPtr *callback)
 {
     UNUSED(rxConfig);
-    UNUSED(rxRuntimeConfig);
+    UNUSED(rxRuntimeState);
     UNUSED(callback);
     return true;
 }
 
-bool rxMspInit(rxConfig_t *rxConfig, rxRuntimeConfig_t *rxRuntimeConfig, rcReadRawDataFnPtr *callback)
+bool rxMspInit(rxConfig_t *rxConfig, rxRuntimeState_t *rxRuntimeState, rcReadRawDataFnPtr *callback)
 {
     UNUSED(rxConfig);
-    UNUSED(rxRuntimeConfig);
+    UNUSED(rxRuntimeState);
     UNUSED(callback);
     return true;
 }
 
-bool feature(uint32_t) {
+bool featureIsEnabled(uint32_t) {
     return false;
 }
 
-void featureClear(uint32_t) {
+void featureDisableImmediate(uint32_t) {
 }
 
 bool rxMspFrameComplete(void)
@@ -219,5 +223,27 @@ void failsafeOnValidDataReceived(void)
 void failsafeOnValidDataFailed(void)
 {
 }
+
+float pt1FilterGain(float f_cut, float dT)
+{
+    UNUSED(f_cut);
+    UNUSED(dT);
+    return 0.0;
+}
+
+void pt1FilterInit(pt1Filter_t *filter, float k)
+{
+    UNUSED(filter);
+    UNUSED(k);
+}
+
+float pt1FilterApply(pt1Filter_t *filter, float input)
+{
+    UNUSED(filter);
+    UNUSED(input);
+    return 0.0;
+}
+
+void pinioBoxTaskControl(void) {}
 
 }

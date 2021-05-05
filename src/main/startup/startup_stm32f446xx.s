@@ -71,13 +71,9 @@ defined in linker script */
   .weak  Reset_Handler
   .type  Reset_Handler, %function
 Reset_Handler: 
-  // Check for bootloader reboot
-  ldr r0, =0x2001FFFC         // mj666
-  ldr r1, =0xDEADBEEF         // mj666
-  ldr r2, [r0, #0]            // mj666
-  str r0, [r0, #0]            // mj666
-  cmp r2, r1                  // mj666
-  beq Reboot_Loader           // mj666
+  // Defined in C code
+  bl persistentObjectInit
+  bl checkForBootLoaderRequest
 
 /* Copy the data segment initializers from flash to SRAM */  
   movs  r1, #0
@@ -108,17 +104,17 @@ LoopFillZerobss:
   bcc  FillZerobss
 
 /* Mark the heap and stack */
-    ldr	r2, =_heap_stack_begin
-    b	LoopMarkHeapStack
+  ldr	r2, =_heap_stack_begin
+  b	LoopMarkHeapStack
 
 MarkHeapStack:
-	movs	r3, 0xa5a5a5a5
-	str	r3, [r2], #4
+  movs	r3, 0xa5a5a5a5
+  str	r3, [r2], #4
 
 LoopMarkHeapStack:
-	ldr	r3, = _heap_stack_end
-	cmp	r2, r3
-	bcc	MarkHeapStack
+  ldr	r3, = _heap_stack_end
+  cmp	r2, r3
+  bcc	MarkHeapStack
 
 /*FPU settings*/
  ldr     r0, =0xE000ED88           /* Enable CP10,CP11 */

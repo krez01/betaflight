@@ -128,7 +128,7 @@ uint8_t receivedPowerSnapshot;
 #define RX_TX_ADDR_LEN 5
 // set rxTxAddr to the bind address
 STATIC_UNIT_TESTED uint8_t rxTxAddr[RX_TX_ADDR_LEN] = {0x4b,0x5c,0x6d,0x7e,0x8f};
-uint32_t *rxSpiIdPtr;
+static uint32_t *rxSpiIdPtr;
 #define RX_TX_ADDR_4 0xD2 // rxTxAddr[4] always set to this value
 
 // radio channels for frequency hopping
@@ -424,9 +424,11 @@ static void inavNrf24Setup(rx_spi_protocol_e protocol, const uint32_t *rxSpiId, 
     writeAckPayload(ackPayload, payloadSize);
 }
 
-bool inavNrf24Init(const rxSpiConfig_t *rxSpiConfig, rxRuntimeConfig_t *rxRuntimeConfig)
+bool inavNrf24Init(const rxSpiConfig_t *rxSpiConfig, rxRuntimeState_t *rxRuntimeState, rxSpiExtiConfig_t *extiConfig)
 {
-    rxRuntimeConfig->channelCount = RC_CHANNEL_COUNT_MAX;
+    UNUSED(extiConfig);
+
+    rxRuntimeState->channelCount = RC_CHANNEL_COUNT_MAX;
     inavNrf24Setup((rx_spi_protocol_e)rxSpiConfig->rx_spi_protocol, &rxSpiConfig->rx_spi_id, rxSpiConfig->rx_spi_rf_channel_count);
 
     return true;

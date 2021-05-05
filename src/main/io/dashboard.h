@@ -43,7 +43,8 @@ typedef enum {
     PAGE_SENSORS,
     PAGE_RX,
     PAGE_PROFILE,
-#ifndef SKIP_TASK_STATISTICS
+    PAGE_RPROF,
+#if defined(USE_TASK_STATISTICS)
     PAGE_TASKS,
 #endif
 #ifdef USE_GPS
@@ -52,7 +53,9 @@ typedef enum {
 #ifdef ENABLE_DEBUG_DASHBOARD_PAGE
     PAGE_DEBUG,
 #endif
-
+#ifdef USE_BLACKBOX
+    PAGE_BB,
+#endif
     PAGE_COUNT
 } pageId_e;
 

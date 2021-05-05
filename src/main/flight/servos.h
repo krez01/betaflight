@@ -41,7 +41,7 @@ enum {
     INPUT_GIMBAL_PITCH,
     INPUT_GIMBAL_ROLL,
     INPUT_SOURCE_COUNT
-} inputSource_e;
+};
 
 // target servo channels
 typedef enum {
@@ -140,7 +140,6 @@ void writeServos(void);
 void servoMixerLoadMix(int index);
 void loadCustomServoMixer(void);
 int servoDirection(int servoIndex, int fromChannel);
-void servoConfigureOutput(void);
 void servosInit(void);
 void servosFilterInit(void);
 void servoMixer(void);
